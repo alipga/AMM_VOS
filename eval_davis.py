@@ -29,6 +29,7 @@ parser.add_argument('--top', type=int, default=20)
 parser.add_argument('--amp', action='store_true')
 parser.add_argument('--mem_every', default=5, type=int)
 parser.add_argument('--include_last', help='include last frame as temporary memory?', action='store_true')
+parser.add_argument('--affinity',choices=['L2','Cosine'],default='L2')
 args = parser.parse_args()
 
 davis_path = args.davis_path

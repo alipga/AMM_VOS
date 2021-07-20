@@ -74,7 +74,7 @@ class STCNModel:
                 # Segment frame 1 with frame 0
                 prev_logits, prev_mask = self.STCN('segment', 
                         k16[:,:,1], kf16_thin[:,1], kf8[:,1], kf4[:,1], 
-                        k16[:,:,0:1], ref_v)
+                        k16[:,:,0:1], ref_v, affinity = self.para['affinity'])
                 prev_v = self.STCN('encode_value', Fs[:,1], kf16[:,1], prev_mask)
 
                 values = torch.cat([ref_v, prev_v], 2)
@@ -84,7 +84,7 @@ class STCNModel:
                 # Segment frame 2 with frame 0 and 1
                 this_logits, this_mask = self.STCN('segment', 
                         k16[:,:,2], kf16_thin[:,2], kf8[:,2], kf4[:,2], 
-                        k16[:,:,0:2], values)
+                        k16[:,:,0:2], values, affinity = self.para['affinity'])
 
                 out['mask_1'] = prev_mask
                 out['mask_2'] = this_mask
@@ -101,7 +101,7 @@ class STCNModel:
                 # Segment frame 1 with frame 0
                 prev_logits, prev_mask = self.STCN('segment', 
                         k16[:,:,1], kf16_thin[:,1], kf8[:,1], kf4[:,1], 
-                        k16[:,:,0:1], ref_v, selector)
+                        k16[:,:,0:1], ref_v, selector = selector, affinity = self.para['affinity'])
                 
                 prev_v1 = self.STCN('encode_value', Fs[:,1], kf16[:,1], prev_mask[:,0:1], prev_mask[:,1:2])
                 prev_v2 = self.STCN('encode_value', Fs[:,1], kf16[:,1], prev_mask[:,1:2], prev_mask[:,0:1])
@@ -113,7 +113,7 @@ class STCNModel:
                 # Segment frame 2 with frame 0 and 1
                 this_logits, this_mask = self.STCN('segment', 
                         k16[:,:,2], kf16_thin[:,2], kf8[:,2], kf4[:,2], 
-                        k16[:,:,0:2], values, selector)
+                        k16[:,:,0:2], values, selector, affinity = self.para['affinity'])
 
                 out['mask_1'] = prev_mask[:,0:1]
                 out['mask_2'] = this_mask[:,0:1]

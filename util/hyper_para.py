@@ -56,6 +56,8 @@ class HyperParameters():
             self.args['iterations'] = none_or_default(self.args['iterations'], 300000)
             self.args['steps'] = none_or_default(self.args['steps'], [150000])
             self.args['single_object'] = True
+            self.args['affinity'] = "L2"
+
         elif self.args['stage'] == 1:
             # BL30K pretraining
             self.args['lr'] = none_or_default(self.args['lr'], 1e-5)
@@ -63,6 +65,7 @@ class HyperParameters():
             self.args['iterations'] = none_or_default(self.args['iterations'], 500000)
             self.args['steps'] = none_or_default(self.args['steps'], [400000])
             self.args['single_object'] = False
+            self.args['affinity'] = "L2"
         elif self.args['stage'] == 2:
             # 300K main training for after BL30K
             self.args['lr'] = none_or_default(self.args['lr'], 1e-5)
@@ -70,6 +73,7 @@ class HyperParameters():
             self.args['iterations'] = none_or_default(self.args['iterations'], 300000)
             self.args['steps'] = none_or_default(self.args['steps'], [250000])
             self.args['single_object'] = False
+            self.args['affinity'] = "L2"
         elif self.args['stage'] == 3:
             # 150K main training for after static image pretraining
             self.args['lr'] = none_or_default(self.args['lr'], 1e-5)
@@ -77,6 +81,7 @@ class HyperParameters():
             self.args['iterations'] = none_or_default(self.args['iterations'], 150000)
             self.args['steps'] = none_or_default(self.args['steps'], [125000])
             self.args['single_object'] = False
+            self.args['affinity'] = "L2"
         else:
             raise NotImplementedError
 

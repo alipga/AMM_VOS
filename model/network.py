@@ -10,6 +10,7 @@ e.g. f16 -> encoded features with stride 16
 import math
 
 import torch
+from torch._C import device
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -39,18 +40,29 @@ class Decoder(nn.Module):
 class MemoryReader(nn.Module):
     def __init__(self):
         super().__init__()
+        
  
-    def get_affinity(self, mk, qk):
+    def get_affinity(self, mk, qk,method='L2'):
         B, CK, T, H, W = mk.shape
-        mk = mk.flatten(start_dim=2)
-        qk = qk.flatten(start_dim=2)
+        if method=='L2':
+            mk = mk.flatten(start_dim=2)
+            qk = qk.flatten(start_dim=2)
 
-        a = mk.pow(2).sum(1).unsqueeze(2)
-        b = 2 * (mk.transpose(1, 2) @ qk)
-        # We don't actually need this, will update paper later
-        # c = qk.pow(2).sum(1).unsqueeze(1)
+            a = mk.pow(2).sum(1).unsqueeze(2)
+            b = 2 * (mk.transpose(1, 2) @ qk)
+            # We don't actually need this, will update paper later
+            # c = qk.pow(2).sum(1).unsqueeze(1)
+            affinity = (-a+b) / math.sqrt(CK)   # B, THW, HW
 
-        affinity = (-a+b) / math.sqrt(CK)   # B, THW, HW
+        elif method=='Cosine':
+            mk = mk.flatten(start_dim=2) #B, CK, THW
+            qk = qk.flatten(start_dim=2) #B, CK, HW
+            affinity = mk.transpose(1,2) @ qk
+        else:
+            raise NotImplementedError
+
+        affinity = self.reallocate(affinity)
+
         affinity = F.softmax(affinity, dim=1)
 
         return affinity
@@ -65,6 +77,26 @@ class MemoryReader(nn.Module):
         mem_out = torch.cat([mem, qv], dim=1)
 
         return mem_out
+
+    def reallocate(self, affinity, p=0.5):
+        B, THW, HW = affinity.shape
+        T = THW/HW
+        support_attention = affinity.mean(dim=2,keepdim=True) # B, THW, 1
+        k = int(THW*p)
+        topk_v, topk_i = torch.topk(support_attention,k=k,dim=1) #1,k
+        w = nn.Parameter(torch.arange(1,k+1,dtype=torch.float),requires_grad=False).to(device=affinity.get_device()).half()
+        w = w/ (sum(w)/k)
+        w = w.view(1,k,1).repeat(B,1,1)
+        support_attention = support_attention.scatter(dim=1,index=topk_i,src=topk_v*w) #B, THW, 1
+        new_affinity = support_attention * affinity
+        return new_affinity
+
+
+
+            
+
+
+
 
 
 class STCN(nn.Module):
@@ -122,10 +154,10 @@ class STCN(nn.Module):
             f16 = self.value_encoder(frame, kf16, mask, other_mask)
         return f16.unsqueeze(2) # B*512*T*H*W
 
-    def segment(self, qk16, qv16, qf8, qf4, mk16, mv16, selector=None): 
+    def segment(self, qk16, qv16, qf8, qf4, mk16, mv16, selector=None, affinity='L2'): 
         # q - query, m - memory
         # qv16 is f16_thin above
-        affinity = self.memory.get_affinity(mk16, qk16)
+        affinity = self.memory.get_affinity(mk16, qk16,method=affinity)
         
         if self.single_object:
             logits = self.decoder(self.memory.readout(affinity, mv16, qv16), qf8, qf4)
