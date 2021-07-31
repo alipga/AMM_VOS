@@ -4,6 +4,7 @@ import time
 from argparse import ArgumentParser
 
 import torch
+from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import numpy as np
@@ -52,10 +53,22 @@ else:
     raise NotImplementedError
 
 # Load our checkpoint
-prop_saved = torch.load(args.model)
+src_dict = torch.load(args.model)
 top_k = args.top
 prop_model = STCN().cuda().eval()
-prop_model.load_state_dict(prop_saved)
+try:
+    prop_model.load_state_dict(src_dict)
+except:
+    print('Seems to be stage 0 results')
+    # Maps SO weight (without other_mask) to MO weight (with other_mask)
+    for k in list(src_dict.keys()):
+        if k == 'value_encoder.conv1.weight':
+            if src_dict[k].shape[1] == 4:
+                pads = torch.zeros((64,1,7,7), device=src_dict[k].device)
+                nn.init.orthogonal_(pads)
+                src_dict[k] = torch.cat([src_dict[k], pads], 1)
+    prop_model.load_state_dict(src_dict)
+
 
 total_process_time = 0
 total_frames = 0

@@ -29,7 +29,7 @@ reply = input('[y] to confirm, others to exit: ')
 if reply != 'y':
     exit()
 
-static,ytb,davis=False,True,False
+static,ytb,ytb18,davis=False,True,True,False
 
 # Static data
 if static:
@@ -103,13 +103,14 @@ if ytb:
         zip_file.extractall('../YouTube/all_frames')
 
     print('Cleaning up YouTubeVOS datasets...')
-    os.remove('../YouTube/train.zip')
-    os.remove('../YouTube/valid.zip')
-    os.remove('../YouTube/all_frames/valid.zip')
+    # os.remove('../YouTube/train.zip')
+    # os.remove('../YouTube/valid.zip')
+    # os.remove('../YouTube/all_frames/valid.zip')
 
     print('Resizing YouTubeVOS to 480p...')
     resize_youtube.resize_all('../YouTube/train', '../YouTube/train_480p')
 
+if ytb18:
     # YouTubeVOS 2018
     os.makedirs('../YouTube2018', exist_ok=True)
     os.makedirs('../YouTube2018/all_frames', exist_ok=True)
@@ -119,14 +120,14 @@ if ytb:
     print('Downloading YouTubeVOS2018 all frames valid...')
     gdown.download('https://drive.google.com/uc?id=1yVoHM6zgdcL348cFpolFcEl4IC1gorbV', output='../YouTube2018/all_frames/valid.zip', quiet=False)
 
-# print('Extracting YouTube2018 datasets...')
-# with zipfile.ZipFile('../YouTube2018/valid.zip', 'r') as zip_file:
-#     zip_file.extractall('../YouTube2018/')
-# with zipfile.ZipFile('../YouTube2018/all_frames/valid.zip', 'r') as zip_file:
-#     zip_file.extractall('../YouTube2018/all_frames')
+    print('Extracting YouTube2018 datasets...')
+    with zipfile.ZipFile('../YouTube2018/valid.zip', 'r') as zip_file:
+        zip_file.extractall('../YouTube2018/')
+    with zipfile.ZipFile('../YouTube2018/all_frames/valid.zip', 'r') as zip_file:
+        zip_file.extractall('../YouTube2018/all_frames')
 
-# print('Cleaning up YouTubeVOS2018 datasets...')
-# os.remove('../YouTube2018/valid.zip')
-# os.remove('../YouTube2018/all_frames/valid.zip')
+    print('Cleaning up YouTubeVOS2018 datasets...')
+    # os.remove('../YouTube2018/valid.zip')
+    # os.remove('../YouTube2018/all_frames/valid.zip')
 
 print('Done.')
