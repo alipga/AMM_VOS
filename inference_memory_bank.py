@@ -4,12 +4,13 @@ import torch
 
 def softmax_w_top(x, top):
     values, indices = torch.topk(x, k=top, dim=1)
+    val = values.clone()
     x_exp = values.exp_()
 
     x_exp /= torch.sum(x_exp, dim=1, keepdim=True)
     x.zero_().scatter_(1, indices, x_exp) # B * THW * HW
 
-    return x
+    return x , indices, val
 
 
 class MemoryBank:
@@ -24,6 +25,12 @@ class MemoryBank:
 
         self.num_objects = k
 
+        self.indices = None
+        self.values = None
+
+
+
+
     def _global_matching(self, mk, qk):
         # NE means number of elements -- typically T*H*W
         B, CK, NE = mk.shape
@@ -34,8 +41,13 @@ class MemoryBank:
         # c = qk.pow(2).expand(B, -1, -1).sum(1).unsqueeze(1)
 
         affinity = (-a+b) / math.sqrt(CK)  # B, NE, HW
-        affinity = softmax_w_top(affinity, top=self.top_k)  # B, THW, HW
-
+        affinity, indices, values = softmax_w_top(affinity, top=self.top_k)  # B, THW, HW
+        if self.indices is None:
+            self.indices = indices
+            self.values = values
+        else:
+            self.indices = torch.cat([self.indices,indices],dim=0)
+            self.values = torch.cat([self.values,values],dim=0)
         return affinity
 
     def _readout(self, affinity, mv):
@@ -83,3 +95,5 @@ class MemoryBank:
             else:
                 self.mem_k = torch.cat([self.mem_k, key], 2)
                 self.mem_v = torch.cat([self.mem_v, value], 2)
+
+        # print(self.mem_k.shape,self.mem_v.shape)

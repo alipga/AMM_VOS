@@ -6,9 +6,11 @@ from model.aggregate import aggregate
 
 from util.tensor_util import pad_divide_by
 
+from FeatureBank import FeatureBank
+
 
 class InferenceCore:
-    def __init__(self, prop_net:STCN, images, num_objects, top_k=20, mem_every=5, include_last=False):
+    def __init__(self, prop_net:STCN, images, num_objects, top_k=20, mem_every=10, include_last=False, memory_budget=5000, close_thresh=1):
         self.prop_net = prop_net
         self.mem_every = mem_every
         self.include_last = include_last
@@ -36,7 +38,11 @@ class InferenceCore:
         self.kh = self.nh//16
         self.kw = self.nw//16
 
-        self.mem_bank = MemoryBank(k=self.k, top_k=top_k)
+        # self.mem_bank = MemoryBank(k=self.k, top_k=top_k)
+        self.mem_bank = FeatureBank(obj_n=self.k, top_k=top_k,
+                                    memory_budget=memory_budget,
+                                    device=self.device,
+                                    thres_close=close_thresh)
 
     def encode_key(self, idx):
         result = self.prop_net.encode_key(self.images[:,idx].cuda())
@@ -57,12 +63,14 @@ class InferenceCore:
             out_mask = aggregate(out_mask, keep_bg=True)
             self.prob[:,ti] = out_mask
 
+
             if ti != end:
                 is_mem_frame = ((ti % self.mem_every) == 0)
                 if self.include_last or is_mem_frame:
                     prev_value = self.prop_net.encode_value(self.images[:,ti].cuda(), qf16, out_mask[1:])
                     prev_key = k16.unsqueeze(2)
-                    self.mem_bank.add_memory(prev_key, prev_value, is_temp=not is_mem_frame)
+                    self.mem_bank.add_memory(prev_key, prev_value, frame_idx=ti+1)
+                    # self.mem_bank.add_memory(prev_key,prev_value)
 
         return closest_ti
 

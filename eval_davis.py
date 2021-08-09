@@ -24,13 +24,15 @@ Arguments loading
 parser = ArgumentParser()
 parser.add_argument('--model', default='saves/stcn.pth')
 parser.add_argument('--davis_path', default='../DAVIS/2017')
-parser.add_argument('--output')
+parser.add_argument('--output',default='davis_output/tmp/')
 parser.add_argument('--split', help='val/testdev', default='val')
 parser.add_argument('--top', type=int, default=20)
 parser.add_argument('--amp', action='store_true')
 parser.add_argument('--mem_every', default=5, type=int)
 parser.add_argument('--include_last', help='include last frame as temporary memory?', action='store_true')
 parser.add_argument('--affinity',choices=['L2','Cosine'],default='L2')
+parser.add_argument('--thresh_close',type=int,default=1)
+parser.add_argument('--memory_budget',type=int,default=5001)
 args = parser.parse_args()
 
 davis_path = args.davis_path
@@ -88,7 +90,8 @@ for data in progressbar(test_loader, max_value=len(test_loader), redirect_stdout
         process_begin = time.time()
 
         processor = InferenceCore(prop_model, rgb, k, top_k=top_k, 
-                        mem_every=args.mem_every, include_last=args.include_last)
+                        mem_every=args.mem_every, include_last=args.include_last,
+                        memory_budget=args.memory_budget,close_thresh=args.thresh_close)
         processor.interact(msk[:,0], 0, rgb.shape[1])
 
         # Do unpad -> upsample to original size 
@@ -104,9 +107,30 @@ for data in progressbar(test_loader, max_value=len(test_loader), redirect_stdout
         total_process_time += time.time() - process_begin
         total_frames += out_masks.shape[0]
 
+        
+
+        # Save keys
+        # os.makedirs(path.join(out_path, 'keys'),exist_ok=True)
+        # this_key_path = path.join(out_path,'keys', name)
+        # keys = processor.mem_bank.mem_k.view(1,64,-1,processor.kh,processor.kw)
+        # np.save(this_key_path,keys.cpu().numpy())
+
+        #Save indices and values
+        # os.makedirs(path.join(out_path, 'indices'),exist_ok=True)
+        # this_ind_path = path.join(out_path, 'indices', name)
+        # ind = processor.mem_bank.indices
+        # np.save(this_ind_path, ind.cpu().numpy())
+
+        # os.makedirs(path.join(out_path, 'values'), exist_ok=True)
+        # this_val_path = path.join(out_path, 'values', name)
+        # values = processor.mem_bank.values
+        # np.save(this_val_path, values.cpu().numpy())
+
+
         # Save the results
         this_out_path = path.join(out_path, name)
         os.makedirs(this_out_path, exist_ok=True)
+
         for f in range(out_masks.shape[0]):
             img_E = Image.fromarray(out_masks[f])
             img_E.putpalette(palette)

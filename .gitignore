@@ -1,6 +1,8 @@
+davis_output/
 log/
 saves/
 .vscode/
+*.ipynb
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
