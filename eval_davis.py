@@ -31,8 +31,8 @@ parser.add_argument('--amp', action='store_true')
 parser.add_argument('--mem_every', default=5, type=int)
 parser.add_argument('--include_last', help='include last frame as temporary memory?', action='store_true')
 parser.add_argument('--affinity',choices=['L2','Cosine'],default='L2')
-parser.add_argument('--thresh_close',type=int,default=1)
-parser.add_argument('--memory_budget',type=int,default=5001)
+parser.add_argument('--thresh_close',type=float,default=0.2)
+parser.add_argument('--memory_budget',type=int,default=5000)
 args = parser.parse_args()
 
 davis_path = args.davis_path
@@ -135,6 +135,8 @@ for data in progressbar(test_loader, max_value=len(test_loader), redirect_stdout
             img_E = Image.fromarray(out_masks[f])
             img_E.putpalette(palette)
             img_E.save(os.path.join(this_out_path, '{:05d}.png'.format(f)))
+
+        print('final_key_size: ',processor.mem_bank.mem_k.shape)
 
         del rgb
         del msk

@@ -16,7 +16,7 @@ def softmax_w_top(x, top):
 
 class FeatureBank:
 
-    def __init__(self, obj_n, memory_budget, device, update_rate=0.1, thres_close=1, top_k=20):
+    def __init__(self, obj_n, memory_budget, device, update_rate=0.1, thres_close=0.95, top_k=20):
         self.num_objects = obj_n
         self.top_k = top_k
 
@@ -48,9 +48,12 @@ class FeatureBank:
         a = mk.pow(2).sum(1).unsqueeze(2)
         b = 2 * (mk.transpose(1, 2) @ qk)
         # We don't actually need this, will update paper later
-        # c = qk.pow(2).expand(B, -1, -1).sum(1).unsqueeze(1)
+        c = qk.pow(2).expand(B, -1, -1).sum(1).unsqueeze(1)
 
-        affinity = (-a+b) / math.sqrt(CK)  # B, NE, HW
+        affinity = (-a+b-c) / math.sqrt(CK)  # B, NE, HW
+
+        self.affinity = affinity.clone()
+
         affinity, indices, values = softmax_w_top(affinity, top=self.top_k)  # B, THW, HW
 
 
@@ -75,7 +78,6 @@ class FeatureBank:
 
         affinity = self._global_matching(mk, qk)
 
-        self.affinity = affinity.clone()
 
         # One affinity for all
         readout_mem = self._readout(affinity.expand(k, -1, -1), mv)
@@ -112,12 +114,25 @@ class FeatureBank:
         _, Ck, bank_n = self.mem_k.shape
         Cv = self.mem_v.shape[1]
 
+
         related_bank_idx = corr.argmax(dim=0, keepdim=True) #1,HW
-        related_bank_corr = torch.gather(corr, 0, related_bank_idx) #1,HW
+        related_bank_corr = -torch.gather(corr, 0, related_bank_idx) #1,HW
+
+        # print(related_bank_corr.min(), related_bank_corr.max())
+
+        related_bank_corr = 1/(torch.exp(related_bank_corr))
+
+        # print(self.thres_close)
+        # print(related_bank_corr.min(),related_bank_corr.max())
+
+
 
 
         # greater than threshold, merge them
         selected_idx = (related_bank_corr[0] > self.thres_close).nonzero()
+
+        # print(f'merg% : {(related_bank_corr[0] > self.thres_close).sum()/related_bank_corr.shape[1]}')
+
         class_related_bank_idx = related_bank_idx[0, selected_idx[:, 0]]  # selected_HW
         unique_related_bank_idx, cnt = class_related_bank_idx.unique(dim=0, return_counts=True)
 

@@ -48,7 +48,7 @@ parser.add_argument('--output')
 parser.add_argument('--split', help='valid/test', default='valid')
 parser.add_argument('--top', type=int, default=20)
 parser.add_argument('--amp', action='store_true')
-parser.add_argument('--mem_every', default=5, type=int)
+parser.add_argument('--mem_every', default=1, type=int)
 parser.add_argument('--include_last', help='include last frame as temporary memory?', action='store_true')
 args = parser.parse_args()
 
