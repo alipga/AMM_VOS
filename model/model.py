@@ -19,6 +19,7 @@ from util.image_saver import pool_pairs
 class STCNModel:
     def __init__(self, para, logger=None, save_path=None, local_rank=0, world_size=1):
         self.para = para
+        print(f' hyper parameter: {self.para}')
         self.single_object = para['single_object']
         self.local_rank = local_rank
 
@@ -48,7 +49,7 @@ class STCNModel:
         # Logging info
         self.report_interval = 100
         self.save_im_interval = 800
-        self.save_model_interval = 50000
+        self.save_model_interval = self.para['save_interval']
         if para['debug']:
             self.report_interval = self.save_im_interval = 1
 
@@ -67,6 +68,12 @@ class STCNModel:
         with torch.cuda.amp.autocast(enabled=self.para['amp']):
             # key features never change, compute once
             k16, kf16_thin, kf16, kf8, kf4 = self.STCN('encode_key', Fs)
+
+
+            print('Fs,Ms',Fs.shape,Ms.shape)
+            print('encoder: ',k16.shape, kf16_thin.shape, kf16.shape, kf8.shape, kf4.shape)
+
+
 
             if self.single_object:
                 ref_v = self.STCN('encode_value', Fs[:,0], kf16[:,0], Ms[:,0])

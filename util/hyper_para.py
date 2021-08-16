@@ -39,6 +39,9 @@ class HyperParameters():
         # Multiprocessing parameters, not set by users
         parser.add_argument('--local_rank', default=0, type=int, help='Local rank of this process')
 
+        # Saving intervals
+        parser.add_argument('--save_interval',help="Define saving intervals during training", type=int, default=50000)
+
         if unknown_arg_ok:
             args, _ = parser.parse_known_args()
             self.args = vars(args)
@@ -82,6 +85,7 @@ class HyperParameters():
             self.args['steps'] = none_or_default(self.args['steps'], [125000])
             self.args['single_object'] = False
             self.args['affinity'] = "L2"
+            self.args['save_interval'] = 5000
         else:
             raise NotImplementedError
 

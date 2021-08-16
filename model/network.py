@@ -92,13 +92,6 @@ class MemoryReader(nn.Module):
         return new_affinity
 
 
-
-            
-
-
-
-
-
 class STCN(nn.Module):
     def __init__(self, single_object):
         super().__init__()
