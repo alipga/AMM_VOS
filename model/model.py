@@ -19,13 +19,14 @@ from util.image_saver import pool_pairs
 class STCNModel:
     def __init__(self, para, logger=None, save_path=None, local_rank=0, world_size=1):
         self.para = para
-        print(f' hyper parameter: {self.para}')
         self.single_object = para['single_object']
         self.local_rank = local_rank
 
         self.STCN = nn.parallel.DistributedDataParallel(
-            STCN(self.single_object).cuda(), 
+            STCN(self.single_object).cuda(),
             device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
+
+        # self.STCN = STCN(self.single_object).cuda()
 
         # Setup logger when local_rank=0
         self.logger = logger
@@ -69,29 +70,29 @@ class STCNModel:
             # key features never change, compute once
             k16, kf16_thin, kf16, kf8, kf4 = self.STCN('encode_key', Fs)
 
-
-            print('Fs,Ms',Fs.shape,Ms.shape)
-            print('encoder: ',k16.shape, kf16_thin.shape, kf16.shape, kf8.shape, kf4.shape)
-
-
-
             if self.single_object:
                 ref_v = self.STCN('encode_value', Fs[:,0], kf16[:,0], Ms[:,0])
+
 
                 # Segment frame 1 with frame 0
                 prev_logits, prev_mask = self.STCN('segment', 
                         k16[:,:,1], kf16_thin[:,1], kf8[:,1], kf4[:,1], 
-                        k16[:,:,0:1], ref_v, affinity = self.para['affinity'])
+                        k16[:,:,0:1], ref_v, affinity = self.para['affinity'],
+                        masks=Ms[:,0:1])
                 prev_v = self.STCN('encode_value', Fs[:,1], kf16[:,1], prev_mask)
 
                 values = torch.cat([ref_v, prev_v], 2)
 
                 del ref_v
 
+                masks = torch.stack([Ms[:,0],prev_mask],dim=1)
+
+
                 # Segment frame 2 with frame 0 and 1
                 this_logits, this_mask = self.STCN('segment', 
                         k16[:,:,2], kf16_thin[:,2], kf8[:,2], kf4[:,2], 
-                        k16[:,:,0:2], values, affinity = self.para['affinity'])
+                        k16[:,:,0:2], values, affinity = self.para['affinity']
+                        ,masks=masks)
 
                 out['mask_1'] = prev_mask
                 out['mask_2'] = this_mask
@@ -108,8 +109,13 @@ class STCNModel:
                 # Segment frame 1 with frame 0
                 prev_logits, prev_mask = self.STCN('segment', 
                         k16[:,:,1], kf16_thin[:,1], kf8[:,1], kf4[:,1], 
-                        k16[:,:,0:1], ref_v, selector = selector, affinity = self.para['affinity'])
-                
+                        k16[:,:,0:1], ref_v, selector = selector, affinity = self.para['affinity']
+                        ,masks=Ms[:,0:1],sec_masks=sec_Ms[:,1:2])
+
+                masks = torch.stack([Ms[:, 0], prev_mask[:,0:1]], dim=1)
+                sec_masks = torch.stack([Ms[:, 0], prev_mask[:,1:2]], dim=1)
+
+
                 prev_v1 = self.STCN('encode_value', Fs[:,1], kf16[:,1], prev_mask[:,0:1], prev_mask[:,1:2])
                 prev_v2 = self.STCN('encode_value', Fs[:,1], kf16[:,1], prev_mask[:,1:2], prev_mask[:,0:1])
                 prev_v = torch.stack([prev_v1, prev_v2], 1)
@@ -120,7 +126,8 @@ class STCNModel:
                 # Segment frame 2 with frame 0 and 1
                 this_logits, this_mask = self.STCN('segment', 
                         k16[:,:,2], kf16_thin[:,2], kf8[:,2], kf4[:,2], 
-                        k16[:,:,0:2], values, selector, affinity = self.para['affinity'])
+                        k16[:,:,0:2], values, selector, affinity = self.para['affinity']
+                        ,masks=masks, sec_masks=sec_masks)
 
                 out['mask_1'] = prev_mask[:,0:1]
                 out['mask_2'] = this_mask[:,0:1]

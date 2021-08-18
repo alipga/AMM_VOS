@@ -61,16 +61,16 @@ class MemoryReader(nn.Module):
         else:
             raise NotImplementedError
 
-        affinity = self.reallocate(affinity)
-
         affinity = F.softmax(affinity, dim=1)
 
         return affinity
 
-    def readout(self, affinity, mv, qv):
+    def readout(self, affinity, mv, qv, mask=None):
         B, CV, T, H, W = mv.shape
 
-        mo = mv.view(B, CV, T*H*W) 
+        affinity = self.reallocate(affinity, mask=mask)
+
+        mo = mv.view(B, CV, T*H*W)
         mem = torch.bmm(mo, affinity) # Weighted-sum B, CV, HW
         mem = mem.view(B, CV, H, W)
 
@@ -78,19 +78,47 @@ class MemoryReader(nn.Module):
 
         return mem_out
 
-    def reallocate(self, affinity, p=0.5):
+    def reallocate(self, affinity, p=0.5, mask=None):
         B, THW, HW = affinity.shape
-        T = THW/HW
-        support_attention = affinity.mean(dim=2,keepdim=True) # B, THW, 1
-        k = int(THW*p)
-        topk_v, topk_i = torch.topk(support_attention,k=k,dim=1) #1,k
-        w = nn.Parameter(torch.arange(1,k+1,dtype=torch.float),requires_grad=False).to(device=affinity.get_device()).half()
-        w = w/ (sum(w)/k)
-        w = w.view(1,k,1).repeat(B,1,1)
-        support_attention = support_attention.scatter(dim=1,index=topk_i,src=topk_v*w) #B, THW, 1
-        new_affinity = support_attention * affinity
+
+        mask = mask.view(B,-1)
+
+        support_attention = affinity.mean(dim=2, keepdim=False)  # B, THW
+        masked_support = (mask > 0.5) * support_attention
+
+        sorted_idx = torch.argsort(masked_support,dim=1,descending=True)
+        obj_cnt = torch.count_nonzero(masked_support,dim=1)
+
+        w = nn.Parameter(torch.arange(1,
+                                      obj_cnt.max()+1,
+                                      dtype=torch.float),
+                         requires_grad=False).to(
+            device=affinity.get_device()).half()
+
+        new_affinity = affinity.clone()
+
+        for i in range(B):
+            k = int(obj_cnt[i] * p)
+            if k == 0:
+                continue
+            w_i = w[:k] / (sum(w[:k])/k)
+
+            new_affinity[i,sorted_idx[i,:k],:] = affinity[i,sorted_idx[i,:k],:] * w_i.unsqueeze(1) # B, THW
+
         return new_affinity
 
+    # def reallocate(self, affinity, p=0.5, masks=None):
+    #     B, THW, HW = affinity.shape
+    #     T = THW/HW
+    #     support_attention = affinity.mean(dim=2,keepdim=True) # B, THW, 1
+    #     k = int(THW*p)
+    #     topk_v, topk_i = torch.topk(support_attention,k=k,dim=1) #1,k
+    #     w = nn.Parameter(torch.arange(1,k+1,dtype=torch.float),requires_grad=False).to(device=affinity.get_device()).half()
+    #     w = w/ (sum(w)/k)
+    #     w = w.view(1,k,1).repeat(B,1,1)
+    #     support_attention = support_attention.scatter(dim=1,index=topk_i,src=topk_v*w) #B, THW, 1
+    #     new_affinity = support_attention * affinity
+    #     return new_affinity
 
 class STCN(nn.Module):
     def __init__(self, single_object):
@@ -147,18 +175,43 @@ class STCN(nn.Module):
             f16 = self.value_encoder(frame, kf16, mask, other_mask)
         return f16.unsqueeze(2) # B*512*T*H*W
 
-    def segment(self, qk16, qv16, qf8, qf4, mk16, mv16, selector=None, affinity='L2'): 
+    def segment(self, qk16, qv16, qf8, qf4, mk16, mv16, selector=None, affinity='L2', masks=None, sec_masks=None):
         # q - query, m - memory
         # qv16 is f16_thin above
-        affinity = self.memory.get_affinity(mk16, qk16,method=affinity)
-        
+
+        _,_,fh,fw = qk16.shape
+        B,N,C,H,W = masks.shape
+
+
+        masks = masks.view(-1,C,H,W)
+        masks = F.interpolate(masks,
+                              size=(fh, fw),
+                              mode='bilinear',
+                              align_corners=True)
+
+        masks = masks.view(B,N,C,fh,fw)
+
+
+        affinity = self.memory.get_affinity(mk16,
+                                            qk16,
+                                            method=affinity)
+
         if self.single_object:
-            logits = self.decoder(self.memory.readout(affinity, mv16, qv16), qf8, qf4)
+            logits = self.decoder(self.memory.readout(affinity, mv16, qv16, mask=masks)
+                                  , qf8, qf4)
             prob = torch.sigmoid(logits)
         else:
+            sec_masks = sec_masks.view(-1, C, H, W)
+            sec_masks = F.interpolate(sec_masks, size=(fh, fw), mode='bilinear')
+            sec_masks = sec_masks.view(B,N, C, fh, fw)
+
             logits = torch.cat([
-                self.decoder(self.memory.readout(affinity, mv16[:,0], qv16), qf8, qf4),
-                self.decoder(self.memory.readout(affinity, mv16[:,1], qv16), qf8, qf4),
+                self.decoder(self.memory.readout(affinity, mv16[:,0],
+                                                 qv16, mask=masks),
+                             qf8, qf4),
+                self.decoder(self.memory.readout(affinity, mv16[:,1],
+                                                 qv16, mask=sec_masks)
+                             , qf8, qf4),
             ], 1)
 
             prob = torch.sigmoid(logits)
