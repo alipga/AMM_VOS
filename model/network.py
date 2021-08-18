@@ -47,7 +47,6 @@ class MyDropout(nn.Module):
         binomial = torch.distributions.binomial.Binomial(probs=1-self.p)
         return X * binomial.sample(X.size()).to(device=X.get_device()) * (1.0/(1-self.p))
 
-
 class MemoryReader(nn.Module):
     def __init__(self):
         super().__init__()
@@ -73,18 +72,17 @@ class MemoryReader(nn.Module):
         else:
             raise NotImplementedError
 
-        affinity = F.softmax(affinity, dim=1)
-
         return affinity
 
     def readout(self, affinity, mv, qv, mask=None):
         B, CV, T, H, W = mv.shape
 
-        # affinity = self.reallocate(affinity, mask=mask)
-        affinity = self.dropout(affinity)
+        affinity = self.reallocate(affinity, mask=mask)
+        # affinity = self.dropout(affinity)
+        affinity_softmax = F.softmax(affinity, dim=1)
 
         mo = mv.view(B, CV, T*H*W)
-        mem = torch.bmm(mo, affinity) # Weighted-sum B, CV, HW
+        mem = torch.bmm(mo, affinity_softmax) # Weighted-sum B, CV, HW
         mem = mem.view(B, CV, H, W)
 
         mem_out = torch.cat([mem, qv], dim=1)
@@ -111,12 +109,13 @@ class MemoryReader(nn.Module):
         new_affinity = affinity.clone()
 
         for i in range(B):
-            k = int(obj_cnt[i] * p)
+            k = obj_cnt[i]
             if k == 0:
                 continue
-            w_i = w[:k] / (sum(w[:k])/k)
+            idx = torch.randint(high=k.item(), size=(int(k*p),))
+            w_i = w[idx] / (sum(w[idx])/k)
 
-            new_affinity[i,sorted_idx[i,:k],:] = affinity[i,sorted_idx[i,:k],:] * w_i.unsqueeze(1) # B, THW
+            new_affinity[i,sorted_idx[i,idx],:] = affinity[i,sorted_idx[i,idx],:] * w_i.unsqueeze(1) # B, THW
 
         return new_affinity
 
