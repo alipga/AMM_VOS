@@ -36,10 +36,22 @@ class Decoder(nn.Module):
         x = F.interpolate(x, scale_factor=4, mode='bilinear', align_corners=False)
         return x
 
+class MyDropout(nn.Module):
+    def __init__(self, p: float = 0.5):
+        super(MyDropout, self).__init__()
+        if p < 0 or p > 1:
+            raise ValueError("dropout probability has to be between 0 and 1, " "but got {}".format(p))
+        self.p = p
+
+    def forward(self, X):
+        binomial = torch.distributions.binomial.Binomial(probs=1-self.p)
+        return X * binomial.sample(X.size()).to(device=X.get_device()) * (1.0/(1-self.p))
+
 
 class MemoryReader(nn.Module):
     def __init__(self):
         super().__init__()
+        self.dropout = MyDropout()
         
  
     def get_affinity(self, mk, qk,method='L2'):
@@ -68,7 +80,8 @@ class MemoryReader(nn.Module):
     def readout(self, affinity, mv, qv, mask=None):
         B, CV, T, H, W = mv.shape
 
-        affinity = self.reallocate(affinity, mask=mask)
+        # affinity = self.reallocate(affinity, mask=mask)
+        affinity = self.dropout(affinity)
 
         mo = mv.view(B, CV, T*H*W)
         mem = torch.bmm(mo, affinity) # Weighted-sum B, CV, HW
